@@ -27,6 +27,18 @@ const app = express();
 const apiPort = 3001;
 app.use(cors());
 
+// Add new API endpoint for room history
+app.get("/api/rooms/:roomCode/history", async (req, res) => {
+    try {
+        const roomCode = req.params.roomCode;
+        const messages = await redis.lrange(`room:${roomCode}`, 0, -1);
+        const parsedMessages = messages.map(msg => JSON.parse(msg));
+        res.json(parsedMessages);
+    } catch (error) {
+        console.error("Error fetching room history:", error);
+        res.status(500).json({ error: "Failed to fetch room history" });
+    }
+});
 
 const wsServer = new WebSocketServer({
   httpServer: server,
@@ -122,10 +134,27 @@ wsServer.on('request', (request) => {
   });
 });
 
-app.get("/api/rooms/", (req, res) => {  
-    res.json(Object.keys(rooms));
+app.get("/api/rooms/:roomCode/history", async (req, res) => {
 
-});  
+  try {
+
+      const roomCode = req.params.roomCode;
+
+      const messages = await redis.lrange(`room:${roomCode}`, 0, -1);
+
+      const parsedMessages = messages.map(msg => JSON.parse(msg));
+
+      res.json(parsedMessages);
+
+  } catch (error) {
+
+      console.error("Error fetching room history:", error);
+
+      res.status(500).json({ error: "Failed to fetch room history" });
+
+  }
+
+});
 
 server.listen(8000, () => {
   console.log('WebSocket server is listening on port 8000');
