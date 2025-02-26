@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { w3cwebsocket as Socket } from "websocket";
 
-const Login = ({ setUserName, setRoomCode }) => {
+const Login = ({ setUserName, setRoomCode, setWebSocketClient }) => {
   const [login, setLogin] = useState("");
   const [roomCode, setRoomCodeInput] = useState("");
   const [error, setError] = useState("");
@@ -47,12 +47,26 @@ const Login = ({ setUserName, setRoomCode }) => {
     }
 
     const newRoomCode = generateRoomCode();
-    setRoomCode(newRoomCode);
-    setUserName(login);
 
     // initialize websocket inside createRoom
-    initializeWebSocket(() => {
-      if (client.current.readyState === WebSocket.OPEN) {
+    initializeWebSocket((data) => {
+      if (data.type === "createRoom" && data.success) {
+        setRoomCode(newRoomCode);
+        setUserName(login);
+        setWebSocketClient(client.current);
+      }
+    });
+
+    if (client.current.readyState === WebSocket.OPEN) {
+      client.current.send(
+        JSON.stringify({
+          type: "createRoom",
+          roomCode: newRoomCode,
+          userName: login,
+        })
+      );
+    } else {
+      client.current.onopen = () => {
         client.current.send(
           JSON.stringify({
             type: "createRoom",
@@ -60,18 +74,8 @@ const Login = ({ setUserName, setRoomCode }) => {
             userName: login,
           })
         );
-      } else {
-        client.current.onopen = () => {
-          client.current.send(
-            JSON.stringify({
-              type: "createRoom",
-              roomCode: newRoomCode,
-              userName: login,
-            })
-          );
-        };
-      }
-    });
+      };
+    }
   };
 
   // Join a room
@@ -101,6 +105,7 @@ const Login = ({ setUserName, setRoomCode }) => {
             );
             setRoomCode(roomCode);
             setUserName(login);
+            setWebSocketClient(client.current);
           } else {
             client.current.onopen = () => {
               client.current.send(

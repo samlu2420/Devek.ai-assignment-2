@@ -1,24 +1,14 @@
 import { w3cwebsocket as Socket } from "websocket";
 import { useState, useEffect, useRef } from "react";
 
-const Chat = ({ userName, roomCode }) => {
+const Chat = ({ userName, roomCode, webSocketClient }) => {
   const [myMessage, setMyMessage] = useState("");
   const [messages, setMessages] = useState([]);
-  const client = useRef(null); // Store WebSocket instance across renders
+  const client = useRef(webSocketClient); // Use the passed WebSocket client
 
   useEffect(() => {
-    client.current = new Socket("ws://127.0.0.1:8000");
-
-    client.current.onopen = () => {
-      console.log(`Connected to WebSocket Server: Room ${roomCode}`);
-      client.current.send(
-        JSON.stringify({
-          type: "join",
-          roomCode,
-          userName
-        })
-      );
-    };
+    // No need to create new connection, use the existing one
+    if (!client.current) return;
 
     client.current.onmessage = (message) => {
       const data = JSON.parse(message.data);
@@ -32,21 +22,20 @@ const Chat = ({ userName, roomCode }) => {
       ]);
     };
 
-    client.current.onerror = (error) => {
-      console.error("WebSocket Error:", error);
-    };
-
-    client.current.onclose = () => {
-      console.log("WebSocket Disconnected");
-    };
+    // Fetch chat history when component mounts
+    fetch(`http://localhost:3001/api/rooms/${roomCode}/history`)
+      .then(response => response.json())
+      .then(history => {
+        setMessages(history);
+      })
+      .catch(error => console.error("Error fetching room history:", error));
 
     return () => {
       if (client.current) {
-        client.current.close();
-        client.current = null;
+        client.current.onmessage = null;
       }
     };
-  }, []); //WebSocket initializes only once
+  }, [roomCode]);
 
   const onSend = () => {
     if (myMessage.trim() === "") return; // Prevent sending empty messages

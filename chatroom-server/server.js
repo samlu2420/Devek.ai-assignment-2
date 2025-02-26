@@ -68,40 +68,63 @@ wsServer.on('request', (request) => {
         //check room
       const exists = roomExists(data.roomCode);
       connection.sendUTF(JSON.stringify({ type: 'checkRoom', exists }));
-    } else if (data.type === 'join') {
-        //join room
+    } else if (data.type === 'createRoom') {
+      // Handle room creation
       roomCode = data.roomCode;
       userName = data.userName;
-      if (!roomExists(roomCode)) {
-        rooms[roomCode] = [];
-      }
-      rooms[roomCode].push(connection);
-      console.log(`${userName} joined room: ${roomCode}`);
+      rooms[roomCode] = [connection];
+      console.log(`Created room: ${roomCode} by ${userName}`);
+      
+      // Send success response back to client
+      connection.sendUTF(JSON.stringify({ 
+        type: 'createRoom', 
+        success: true, 
+        roomCode 
+      }));
 
-      // new user join broadcast
-      const joinMessage = {
+      // Create room message
+      const createMessage = {
         type: "message",
-        message: `${userName} has joined the room.`,
+        message: `${userName} has created the room.`,
         userName: "System",
         timestamp: new Date().toISOString(),
       };
+
+      redis.lpush(`room:${roomCode}`, JSON.stringify(createMessage))
+        .then(() => console.log("Create message stored in Redis"))
+        .catch((err) => console.error("Redis LPUSH error:", err));
+
+    } else if (data.type === 'join') {
+      // Only send join message if it's not the room creator
+      if (!roomExists(roomCode) || !rooms[roomCode].includes(connection)) {
+        roomCode = data.roomCode;
+        userName = data.userName;
+        if (!roomExists(roomCode)) {
+          rooms[roomCode] = [];
+        }
+        rooms[roomCode].push(connection);
+        console.log(`${userName} joined room: ${roomCode}`);
+
+        // new user join broadcast
+        const joinMessage = {
+          type: "message",
+          message: `${userName} has joined the room.`,
+          userName: "System",
+          timestamp: new Date().toISOString(),
+        };
 
         console.log("Storing in Redis:", JSON.stringify(joinMessage));
 
         redis.lpush(`room:${roomCode}`, JSON.stringify(joinMessage))
           .then(() => console.log("Join message stored in Redis"))
           .catch((err) => console.error("Redis LPUSH error:", err));
-      
+        
         rooms[roomCode].forEach((client) => {
-        if (userName != null) {
-            if (client !== connection) {
-                client.sendUTF(JSON.stringify(joinMessage));
-
-            } 
-        }
-       
-      });
-      
+          if (client !== connection) {
+              client.sendUTF(JSON.stringify(joinMessage));
+          }
+        });
+      }
     } else if (data.type === 'message' && roomCode) {
         //broadcast message
         const broadcastMessage = {
@@ -110,16 +133,15 @@ wsServer.on('request', (request) => {
             userName: data.userName, 
             timestamp: new Date().toISOString(),
         };
-      console.log(`Broadcasting message from ${data.userName} in room ${roomCode}: ${data.message}`);
-            redis.lpush(`room:${roomCode}`, JSON.stringify(broadcastMessage))
+        console.log(`Broadcasting message from ${data.userName} in room ${roomCode}: ${data.message}`);
+        redis.lpush(`room:${roomCode}`, JSON.stringify(broadcastMessage))
             .then(() => console.log("Broadcast message stored in Redis"))
             .catch((err) => console.error("Redis LPUSH error:", err));
-      rooms[roomCode].forEach((client) => {
-        if (client !== connection) {
-          client.sendUTF(JSON.stringify({ type: 'message', message: data.message, userName: data.userName }));
-        }
-      });
-      
+        rooms[roomCode].forEach((client) => {
+            if (client !== connection) {
+                client.sendUTF(JSON.stringify(broadcastMessage));
+            }
+        });
     }
   });
 
@@ -137,21 +159,13 @@ wsServer.on('request', (request) => {
 app.get("/api/rooms/:roomCode/history", async (req, res) => {
 
   try {
-
       const roomCode = req.params.roomCode;
-
       const messages = await redis.lrange(`room:${roomCode}`, 0, -1);
-
       const parsedMessages = messages.map(msg => JSON.parse(msg));
-
       res.json(parsedMessages);
-
   } catch (error) {
-
       console.error("Error fetching room history:", error);
-
       res.status(500).json({ error: "Failed to fetch room history" });
-
   }
 
 });
