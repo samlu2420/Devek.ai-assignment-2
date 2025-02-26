@@ -23,7 +23,7 @@ const Chat = ({ userName, roomCode, webSocketClient }) => {
     };
 
     // Fetch chat history when component mounts
-    fetch(`http://localhost:3001/api/rooms/${roomCode}/history`)
+    fetch(`${process.env.REACT_APP_API_URL}/api/rooms/${roomCode}/history`)
       .then(response => response.json())
       .then(history => {
         setMessages(history);

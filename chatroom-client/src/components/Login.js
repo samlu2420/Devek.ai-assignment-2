@@ -13,7 +13,7 @@ const Login = ({ setUserName, setRoomCode, setWebSocketClient }) => {
       client.current.close();
     }
 
-    client.current = new Socket("ws://127.0.0.1:8000");
+    client.current = new Socket(process.env.REACT_APP_WS_URL || "ws://localhost:8000");
 
     client.current.onopen = () => {
       console.log("Connected to WebSocket server");

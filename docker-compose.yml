@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  server:
+    build: 
+      context: ./chatroom-server
+    ports:
+      - "8000:8000"
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis-18319.c322.us-east-1-2.ec2.redns.redis-cloud.com
+      - REDIS_PORT=18319
+      - REDIS_PASSWORD=hicUmudlgVjZ5KjbP5DSl5a2LtqPHOXC
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./chatroom-client
+    ports:
+      - "3002:3001"
+    environment:
+      - NODE_ENV=production
+      - REACT_APP_WS_URL=ws://localhost:8000
+      - REACT_APP_API_URL=http://localhost:3001
+    depends_on:
+      - server
+    restart: unless-stopped 
