@@ -1,9 +1,32 @@
-const WebSocketServer = require('websocket').server;
-const http = require('http');
+const Redis = require("ioredis");
+const cors = require("cors");
+const express = require("express");
+const { server: WebSocketServer } = require("websocket");
+const http = require("http");
 
 const server = http.createServer((request, response) => {
     console.log('Received request for ' + request.url);
 });
+
+// redis client
+const redis = new Redis({
+    host: "redis-18319.c322.us-east-1-2.ec2.redns.redis-cloud.com",
+    port: 18319,
+    password: "hicUmudlgVjZ5KjbP5DSl5a2LtqPHOXC",
+  });
+
+redis.on("error", (err) => {
+  console.error("Redis connection error:", err);
+});
+redis.on("connect", () => {
+  console.log("Connected to Redis");
+});
+
+// express app
+const app = express();
+const apiPort = 3001;
+app.use(cors());
+
 
 const wsServer = new WebSocketServer({
   httpServer: server,
@@ -44,26 +67,47 @@ wsServer.on('request', (request) => {
       console.log(`${userName} joined room: ${roomCode}`);
 
       // new user join broadcast
-      rooms[roomCode].forEach((client) => {
+      const joinMessage = {
+        type: "message",
+        message: `${userName} has joined the room.`,
+        userName: "System",
+        timestamp: new Date().toISOString(),
+      };
+
+        console.log("Storing in Redis:", JSON.stringify(joinMessage));
+
+        redis.lpush(`room:${roomCode}`, JSON.stringify(joinMessage))
+          .then(() => console.log("Join message stored in Redis"))
+          .catch((err) => console.error("Redis LPUSH error:", err));
+      
+        rooms[roomCode].forEach((client) => {
         if (userName != null) {
             if (client !== connection) {
-                client.sendUTF(JSON.stringify({
-                type: 'broadcast',
-                message: `${userName} has joined the room.`,
-                userName: 'System'
-                }));
+                client.sendUTF(JSON.stringify(joinMessage));
+
             } 
         }
        
       });
+      
     } else if (data.type === 'message' && roomCode) {
         //broadcast message
+        const broadcastMessage = {
+            type: "message",
+            message: data.message,  
+            userName: data.userName, 
+            timestamp: new Date().toISOString(),
+        };
       console.log(`Broadcasting message from ${data.userName} in room ${roomCode}: ${data.message}`);
+            redis.lpush(`room:${roomCode}`, JSON.stringify(broadcastMessage))
+            .then(() => console.log("Broadcast message stored in Redis"))
+            .catch((err) => console.error("Redis LPUSH error:", err));
       rooms[roomCode].forEach((client) => {
         if (client !== connection) {
           client.sendUTF(JSON.stringify({ type: 'message', message: data.message, userName: data.userName }));
         }
       });
+      
     }
   });
 
@@ -78,6 +122,15 @@ wsServer.on('request', (request) => {
   });
 });
 
+app.get("/api/rooms/", (req, res) => {  
+    res.json(Object.keys(rooms));
+
+});  
+
 server.listen(8000, () => {
   console.log('WebSocket server is listening on port 8000');
 });
+
+app.listen(apiPort, () => {
+    console.log(`Server is running at http://localhost:${apiPort}`);
+  });

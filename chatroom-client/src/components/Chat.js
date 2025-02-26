@@ -15,6 +15,7 @@ const Chat = ({ userName, roomCode }) => {
         JSON.stringify({
           type: "join",
           roomCode,
+          userName
         })
       );
     };
